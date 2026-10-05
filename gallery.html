@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo Gallery Preview</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #ffffff;
+            --surface: #f5f5f7;
+            --surface-active: #e9e9ec;
+            --ink: #1c1c1e;
+            --muted: #6e6e73;
+            --accent: #0b5fff;
+            --line: #e5e5ea;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            margin: 0;
+            padding: 2rem 1rem 3rem;
+            color: var(--ink);
+            background: var(--bg);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        .wrap {
+            max-width: 40rem;
+            margin: 0 auto;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 1.25rem;
+            color: var(--muted);
+            font-size: 0.9rem;
+            text-decoration: none;
+        }
+
+        .back-link:hover,
+        .back-link:focus-visible {
+            color: var(--accent);
+        }
+
+        h1 {
+            margin: 2rem 0 0.6rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        h1:first-of-type {
+            margin-top: 0;
+        }
+
+        .collection {
+            margin-bottom: 2rem;
+        }
+
+        .collection h2 {
+            margin: 0 0 0.6rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .collection h2 a {
+            color: var(--ink);
+            text-decoration: none;
+        }
+
+        .collection h2 a:hover,
+        .collection h2 a:focus-visible {
+            color: var(--accent);
+        }
+
+        .status {
+            padding: 0.9rem 0;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+
+        .status.error a {
+            color: var(--accent);
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .album-card {
+            position: relative;
+            display: block;
+            overflow: hidden;
+            border-radius: 0.75rem;
+            background: var(--surface);
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .album-card img {
+            display: block;
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            object-fit: cover;
+        }
+
+        .album-card:active img {
+            opacity: 0.85;
+        }
+
+        .album-card-title {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            padding: 0.75rem 0.85rem;
+            background: rgba(0, 0, 0, 0.55);
+            color: #fff;
+            font-weight: 600;
+            font-size: 0.95rem;
+            line-height: 1.3;
+        }
+
+        .album-card-error {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            aspect-ratio: 4 / 3;
+            padding: 1rem;
+            color: var(--muted);
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
+        @media (max-width: 420px) {
+            body {
+                padding: 1.5rem 0.85rem 2.5rem;
+            }
+
+            .card-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <a class="back-link" href="index.html">&larr; Back to shortcuts</a>
+
+        <div id="app"></div>
+    </div>
+
+    <script>
+        const API_KEY = 'de142c2b86e8d2d0679c9faa5a01ddfe';
+        const USERNAME = 'bionicteaching';
+
+        const GROUPS = [
+            {
+                title: '2026-2027',
+                collections: [
+                    { id: '72157725306287907', title: 'Richmond United Red ECNL RL U17' },
+                    { id: '72157725341798808', title: 'Trinity HS Soccer' },
+                    { id: '72157725437250086', title: 'Middlebury College Football' },
+                    { id: '72157725493539083', title: 'Trinity HS Field Hockey' }
+                ],
+            },
+            {
+                title: 'Archives',
+                collections: [
+                    { id: '72157724158858703', title: 'Middlebury College Football 2025-2026' },
+                    { id: '72157724100361636', title: 'Trinity HS Soccer - 2025-2026' },
+                    { id: '72157723085244333', title: 'Trinity HS Soccer - 2024-2025' },
+                    { id: '72157722103565640', title: 'Trinity HS Football - 2023-2024' },
+                    { id: '72157721194813741', title: 'Trinity HS Football - 2022-2023' },
+                ],
+            },
+        ];
+
+        const SIZE_PREFERENCE = ['Large 1600', 'Large', 'Medium 800', 'Medium 640', 'Medium'];
+
+        const FALLBACK_IMAGE = 'data:image/svg+xml,' + encodeURIComponent(`
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+                <rect width="400" height="300" fill="#e9e9ec"/>
+                <g fill="none" stroke="#9b9ba1" stroke-width="10" stroke-linejoin="round" stroke-linecap="round">
+                    <rect x="60" y="80" width="280" height="180" rx="12"/>
+                    <circle cx="150" cy="150" r="26"/>
+                    <path d="M60 230 L160 160 L220 210 L270 170 L340 230"/>
+                </g>
+            </svg>
+        `.trim());
+
+        function flickrRequest(method, params) {
+            return new Promise((resolve, reject) => {
+                const cbName = 'jsonp_cb_' + Math.random().toString(36).slice(2);
+                const script = document.createElement('script');
+
+                const cleanup = () => {
+                    delete window[cbName];
+                    script.remove();
+                };
+
+                window[cbName] = (data) => {
+                    cleanup();
+                    if (data.stat !== 'ok') {
+                        reject(new Error(data.message || 'Flickr API error'));
+                    } else {
+                        resolve(data);
+                    }
+                };
+
+                const query = new URLSearchParams({
+                    method,
+                    api_key: API_KEY,
+                    format: 'json',
+                    jsoncallback: cbName,
+                    ...params,
+                });
+
+                script.src = `https://api.flickr.com/services/rest/?${query.toString()}`;
+                script.onerror = () => {
+                    cleanup();
+                    reject(new Error('Network error contacting Flickr'));
+                };
+                document.head.appendChild(script);
+            });
+        }
+
+        async function getUserId(username) {
+            const data = await flickrRequest('flickr.people.findByUsername', { username });
+            return data.user.id;
+        }
+
+        async function collectSets(userId, collectionId) {
+            const data = await flickrRequest('flickr.collections.getTree', {
+                user_id: userId,
+                collection_id: collectionId,
+            });
+
+            const sets = [];
+            const walk = (collections) => {
+                if (!collections) return;
+                for (const col of collections) {
+                    if (col.set) {
+                        for (const s of col.set) sets.push({ id: s.id, title: s.title });
+                    }
+                    if (col.collection) walk(col.collection);
+                }
+            };
+            walk(data.collections && data.collections.collection);
+            return sets;
+        }
+
+        function pickSize(sizes) {
+            for (const label of SIZE_PREFERENCE) {
+                const match = sizes.find((s) => s.label === label);
+                if (match) return match.source;
+            }
+            return sizes.length ? sizes[sizes.length - 1].source : null;
+        }
+
+        async function getAlbumCover(userId, setId) {
+            const info = await flickrRequest('flickr.photosets.getInfo', {
+                photoset_id: setId,
+                user_id: userId,
+            });
+            const photoset = info.photoset;
+
+            const sizesData = await flickrRequest('flickr.photos.getSizes', {
+                photo_id: photoset.primary,
+            });
+
+            return {
+                title: photoset.title && photoset.title._content,
+                imageUrl: pickSize(sizesData.sizes.size),
+            };
+        }
+
+        function collectionUrl(collectionId) {
+            return `https://www.flickr.com/photos/${USERNAME}/collections/${collectionId}/`;
+        }
+
+        function albumUrl(setId) {
+            return `https://www.flickr.com/photos/${USERNAME}/albums/${setId}/`;
+        }
+
+        function el(tag, props = {}, children = []) {
+            const node = document.createElement(tag);
+            Object.assign(node, props);
+            for (const child of children) node.appendChild(child);
+            return node;
+        }
+
+        async function renderAlbumCard(userId, set, cardsWrap) {
+            const card = el('a', {
+                className: 'album-card',
+                href: albumUrl(set.id),
+                target: '_blank',
+                rel: 'noopener',
+            });
+            card.appendChild(el('span', { className: 'album-card-error', textContent: 'Loading…' }));
+            cardsWrap.appendChild(card);
+
+            try {
+                const cover = await getAlbumCover(userId, set.id);
+                const title = cover.title || set.title;
+                card.innerHTML = '';
+                if (cover.imageUrl) {
+                    card.appendChild(el('img', {
+                        src: cover.imageUrl,
+                        alt: title,
+                        loading: 'lazy',
+                        onerror(e) {
+                            e.target.onerror = null;
+                            e.target.src = FALLBACK_IMAGE;
+                        },
+                    }));
+                    card.appendChild(el('span', { className: 'album-card-title', textContent: title }));
+                } else {
+                    card.appendChild(el('span', { className: 'album-card-error', textContent: title }));
+                }
+            } catch (err) {
+                card.innerHTML = '';
+                card.appendChild(el('span', {
+                    className: 'album-card-error',
+                    textContent: `${set.title} (couldn't load preview)`,
+                }));
+            }
+        }
+
+        async function renderCollection(userId, collection, container) {
+            const heading = el('h2', {}, [
+                el('a', {
+                    href: collectionUrl(collection.id),
+                    target: '_blank',
+                    rel: 'noopener',
+                    textContent: collection.title,
+                }),
+            ]);
+            const status = el('div', { className: 'status', textContent: 'Loading preview…' });
+
+            const sectionEl = el('div', { className: 'collection', id: `collection-${collection.id}` }, [heading, status]);
+            container.appendChild(sectionEl);
+
+            try {
+                const sets = await collectSets(userId, collection.id);
+                if (sets.length === 0) {
+                    status.className = 'status error';
+                    status.innerHTML = `No albums found in this collection. <a href="${collectionUrl(collection.id)}" target="_blank" rel="noopener">View on Flickr</a>`;
+                    return;
+                }
+
+                const cardsWrap = el('div', { className: 'card-grid' });
+                sectionEl.replaceChild(cardsWrap, status);
+
+                await Promise.all(sets.map((set) => renderAlbumCard(userId, set, cardsWrap)));
+            } catch (err) {
+                status.className = 'status error';
+                status.innerHTML = `Couldn't load this collection (${err.message}). <a href="${collectionUrl(collection.id)}" target="_blank" rel="noopener">View on Flickr</a>`;
+            }
+        }
+
+        function findCollection(collectionId) {
+            for (const group of GROUPS) {
+                const match = group.collections.find((c) => c.id === collectionId);
+                if (match) return { collection: match, groupTitle: group.title };
+            }
+            return null;
+        }
+
+        async function main() {
+            const app = document.getElementById('app');
+            const loading = el('p', { className: 'status', textContent: 'Connecting to Flickr…' });
+            app.appendChild(loading);
+
+            let userId;
+            try {
+                userId = await getUserId(USERNAME);
+            } catch (err) {
+                loading.className = 'status error';
+                loading.textContent = `Couldn't reach Flickr (${err.message}).`;
+                return;
+            }
+            loading.remove();
+
+            const requestedId = new URLSearchParams(location.search).get('collection');
+            const found = requestedId ? findCollection(requestedId) : null;
+
+            if (found) {
+                document.title = `${found.collection.title} — Photo Gallery Preview`;
+                app.appendChild(el('h1', { textContent: found.groupTitle }));
+                renderCollection(userId, found.collection, app);
+                return;
+            }
+
+            if (requestedId) {
+                app.appendChild(el('p', { className: 'status error', textContent: `Unknown collection "${requestedId}".` }));
+            }
+
+            for (const group of GROUPS) {
+                app.appendChild(el('h1', { textContent: group.title }));
+                for (const collection of group.collections) {
+                    renderCollection(userId, collection, app);
+                }
+            }
+        }
+
+        main();
+    </script>
+</body>
+</html>
